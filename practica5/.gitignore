@@ -1,0 +1,4 @@
+telemetria.db
+.venv/
+mosquitto/data/
+__pycache__/
