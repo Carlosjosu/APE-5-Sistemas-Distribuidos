@@ -32,6 +32,13 @@ def simular_combustible():
     }
 
 
+def on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code.is_failure:
+        print(f"Error al conectar con el broker: {reason_code}", flush=True)
+    else:
+        print(f"Conectado al broker MQTT en {BROKER}:{PUERTO}", flush=True)
+
+
 def publicar(client, vehiculo, sensor, datos, timestamp):
     payload = {
         "vehicle_id": vehiculo,
@@ -49,6 +56,7 @@ def main():
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
         client_id="simulador_sensores",
     )
+    client.on_connect = on_connect
     client.connect(BROKER, PUERTO, keepalive=60)
     client.loop_start()
 
