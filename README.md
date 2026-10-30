@@ -98,6 +98,10 @@ Prueba de publicación y suscripción dentro del broker:
 
 ![Prueba publicar y suscribir](practica5/Capturas/1.%20Prueba%20publicar%20y%20suscribir.png)
 
+Topics jerárquicos de los 3 vehículos recibidos por un suscriptor MQTT (`flota/#`):
+
+![Topics MQTT de los 3 vehículos](practica5/Capturas/1.%20Topics%20MQTT%20de%20los%203%20vehiculos.png)
+
 ### Actividad 2 — Simulador de sensores
 
 ![Simulador de sensores](practica5/Capturas/2.%20Simulador%20de%20sensores.png)
@@ -107,6 +111,10 @@ Prueba de publicación y suscripción dentro del broker:
 Alertas por consola cuando la temperatura supera 4 °C:
 
 ![Suscriptor con alertas](practica5/Capturas/3.%20Suscriptor%20con%20alertas.png)
+
+Alertas de temperatura (> 4 °C) y de combustible bajo (< 20 %) en la consola del suscriptor:
+
+![Alertas de temperatura y combustible](practica5/Capturas/3.%20Alertas%20de%20temperatura%20y%20combustible.png)
 
 Últimas filas almacenadas en cada tabla:
 
@@ -136,6 +144,49 @@ Colas durables (`D`) con mensajes en el panel de RabbitMQ:
   alertas y evita que RabbitMQ cierre la conexión por inactividad.
 - **Consultas parametrizadas (`?`)** en SQLite para evitar inyección SQL, y manejo de JSON
   inválido o incompleto sin detener el suscriptor.
+
+## Preguntas de control
+
+**1. ¿Diferencias clave entre MQTT y AMQP? ¿Por qué MQTT es más adecuado para IoT?**
+
+| | MQTT | AMQP (RabbitMQ) |
+|---|---|---|
+| Protocolo | Binario muy ligero, cabecera mínima de 2 bytes, sobre TCP | Más completo y pesado: canales, transacciones, confirmaciones, propiedades por mensaje |
+| Patrón | Publicación/suscripción por topics a través de un broker | Colas con enrutamiento flexible (directo, fanout, topic, headers), punto a punto y pub/sub |
+| Casos típicos | Sensores, dispositivos con poca batería, CPU o ancho de banda; redes inestables | Integración entre servicios backend, colas de trabajo, procesamiento confiable de tareas |
+
+MQTT es más adecuado para IoT porque consume poco ancho de banda y energía, tolera
+conexiones intermitentes (keepalive, sesiones persistentes, *last will*) y los dispositivos
+solo necesitan conocer el broker y el topic. En esta práctica se combinan los dos: MQTT
+recoge la telemetría de los vehículos y AMQP distribuye a los servicios internos solo lo
+que requiere procesamiento.
+
+**2. ¿Por qué MQTT usa jerarquías de topics y RabbitMQ usa exchanges, colas y bindings? ¿Ventajas de cada enfoque?**
+
+- **Topics jerárquicos (MQTT):** el enrutamiento está implícito en el nombre
+  (`flota/VH-001/temperatura`) y los suscriptores filtran con comodines (`+` un nivel,
+  `#` varios niveles). Es simple, no requiere configuración previa y escala bien con miles
+  de dispositivos. Su limitación es que el broker no almacena mensajes para consumidores
+  ausentes salvo sesiones persistentes o mensajes *retained*.
+- **Exchanges, colas y bindings (RabbitMQ):** separa quién publica (exchange) de dónde se
+  guarda (cola) y cómo se conectan (binding). Permite reglas de enrutamiento complejas,
+  repartir trabajo entre varios consumidores, persistir mensajes y confirmar su
+  procesamiento (*ack*). A cambio, exige declarar y configurar esa topología.
+
+En el proyecto, los topics de MQTT agrupan la telemetría por vehículo y sensor, y el puente
+la traduce a colas durables específicas por tipo de alerta.
+
+**3. Niveles de QoS en MQTT: ventajas, desventajas y uso en el monitoreo de flota**
+
+| QoS | Garantía | Ventajas | Desventajas | Uso en la flota |
+|---|---|---|---|---|
+| 0 — *at most once* | Se envía una vez, sin confirmación | Máximo rendimiento, mínimo tráfico | Puede perderse | GPS: se publica cada pocos segundos y una lectura perdida se reemplaza con la siguiente |
+| 1 — *at least once* | Se reenvía hasta recibir `PUBACK` | Garantiza la entrega con poco costo extra | Puede llegar duplicado | Temperatura y combustible: una alerta no debe perderse y un duplicado es inofensivo |
+| 2 — *exactly once* | Handshake de 4 pasos (`PUBREC`/`PUBREL`/`PUBCOMP`) | Ni pérdidas ni duplicados | Mayor latencia y tráfico | Eventos que no se pueden repetir, como una orden remota de bloqueo del vehículo o un registro de facturación |
+
+En la implementación actual el simulador publica con QoS 0 (valor por defecto) y el
+suscriptor y el puente se suscriben con QoS 1; como el QoS efectivo es el menor de ambos,
+para garantizar las alertas habría que publicar temperatura y combustible con `qos=1`.
 
 ## Estructura
 
